@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package helloworld;
+
+option go_package = "github.com/StephanieSunshine/go-grpc-hw-lib;go_grpc_hw_lib";
+
+service HelloWorld {
+	rpc Hello(Request) returns (Response) {}
+}
+
+message Request {
+	string data = 1;
+}
+
+message Response {
+	string data = 1;
+}
+
+
