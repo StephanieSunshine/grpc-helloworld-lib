@@ -2,10 +2,11 @@ syntax = "proto3";
 
 package helloworld;
 
-option go_package = "github.com/StephanieSunshine/go-grpc-hw-lib;go_grpc_hw_lib";
+option go_package = "github.com/StephanieSunshine/grpc-helloworld-lib;grpc_helloworld_lib";
 
 service HelloWorld {
 	rpc Hello(Request) returns (Response) {}
+	rpc Stream(stream Request) returns (stream Response) {}
 }
 
 message Request {
