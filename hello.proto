@@ -6,7 +6,9 @@ option go_package = "github.com/StephanieSunshine/grpc-helloworld-lib;grpc_hello
 
 service HelloWorld {
 	rpc Hello(Request) returns (Response) {}
-	rpc Stream(stream Request) returns (stream Response) {}
+	rpc StreamFrom(Request) returns (stream Response) {}
+	rpc StreamTo(stream Request) returns (Response) {}
+	rpc StreamBoth(stream Request) returns (stream Response) {}
 }
 
 message Request {

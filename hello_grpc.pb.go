@@ -19,7 +19,9 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type HelloWorldClient interface {
 	Hello(ctx context.Context, in *Request, opts ...grpc.CallOption) (*Response, error)
-	Stream(ctx context.Context, opts ...grpc.CallOption) (HelloWorld_StreamClient, error)
+	StreamFrom(ctx context.Context, in *Request, opts ...grpc.CallOption) (HelloWorld_StreamFromClient, error)
+	StreamTo(ctx context.Context, opts ...grpc.CallOption) (HelloWorld_StreamToClient, error)
+	StreamBoth(ctx context.Context, opts ...grpc.CallOption) (HelloWorld_StreamBothClient, error)
 }
 
 type helloWorldClient struct {
@@ -39,30 +41,96 @@ func (c *helloWorldClient) Hello(ctx context.Context, in *Request, opts ...grpc.
 	return out, nil
 }
 
-func (c *helloWorldClient) Stream(ctx context.Context, opts ...grpc.CallOption) (HelloWorld_StreamClient, error) {
-	stream, err := c.cc.NewStream(ctx, &HelloWorld_ServiceDesc.Streams[0], "/helloworld.HelloWorld/Stream", opts...)
+func (c *helloWorldClient) StreamFrom(ctx context.Context, in *Request, opts ...grpc.CallOption) (HelloWorld_StreamFromClient, error) {
+	stream, err := c.cc.NewStream(ctx, &HelloWorld_ServiceDesc.Streams[0], "/helloworld.HelloWorld/StreamFrom", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &helloWorldStreamClient{stream}
+	x := &helloWorldStreamFromClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
 	return x, nil
 }
 
-type HelloWorld_StreamClient interface {
+type HelloWorld_StreamFromClient interface {
+	Recv() (*Response, error)
+	grpc.ClientStream
+}
+
+type helloWorldStreamFromClient struct {
+	grpc.ClientStream
+}
+
+func (x *helloWorldStreamFromClient) Recv() (*Response, error) {
+	m := new(Response)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *helloWorldClient) StreamTo(ctx context.Context, opts ...grpc.CallOption) (HelloWorld_StreamToClient, error) {
+	stream, err := c.cc.NewStream(ctx, &HelloWorld_ServiceDesc.Streams[1], "/helloworld.HelloWorld/StreamTo", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &helloWorldStreamToClient{stream}
+	return x, nil
+}
+
+type HelloWorld_StreamToClient interface {
+	Send(*Request) error
+	CloseAndRecv() (*Response, error)
+	grpc.ClientStream
+}
+
+type helloWorldStreamToClient struct {
+	grpc.ClientStream
+}
+
+func (x *helloWorldStreamToClient) Send(m *Request) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *helloWorldStreamToClient) CloseAndRecv() (*Response, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(Response)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *helloWorldClient) StreamBoth(ctx context.Context, opts ...grpc.CallOption) (HelloWorld_StreamBothClient, error) {
+	stream, err := c.cc.NewStream(ctx, &HelloWorld_ServiceDesc.Streams[2], "/helloworld.HelloWorld/StreamBoth", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &helloWorldStreamBothClient{stream}
+	return x, nil
+}
+
+type HelloWorld_StreamBothClient interface {
 	Send(*Request) error
 	Recv() (*Response, error)
 	grpc.ClientStream
 }
 
-type helloWorldStreamClient struct {
+type helloWorldStreamBothClient struct {
 	grpc.ClientStream
 }
 
-func (x *helloWorldStreamClient) Send(m *Request) error {
+func (x *helloWorldStreamBothClient) Send(m *Request) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *helloWorldStreamClient) Recv() (*Response, error) {
+func (x *helloWorldStreamBothClient) Recv() (*Response, error) {
 	m := new(Response)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -75,7 +143,9 @@ func (x *helloWorldStreamClient) Recv() (*Response, error) {
 // for forward compatibility
 type HelloWorldServer interface {
 	Hello(context.Context, *Request) (*Response, error)
-	Stream(HelloWorld_StreamServer) error
+	StreamFrom(*Request, HelloWorld_StreamFromServer) error
+	StreamTo(HelloWorld_StreamToServer) error
+	StreamBoth(HelloWorld_StreamBothServer) error
 	mustEmbedUnimplementedHelloWorldServer()
 }
 
@@ -86,8 +156,14 @@ type UnimplementedHelloWorldServer struct {
 func (UnimplementedHelloWorldServer) Hello(context.Context, *Request) (*Response, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Hello not implemented")
 }
-func (UnimplementedHelloWorldServer) Stream(HelloWorld_StreamServer) error {
-	return status.Errorf(codes.Unimplemented, "method Stream not implemented")
+func (UnimplementedHelloWorldServer) StreamFrom(*Request, HelloWorld_StreamFromServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamFrom not implemented")
+}
+func (UnimplementedHelloWorldServer) StreamTo(HelloWorld_StreamToServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamTo not implemented")
+}
+func (UnimplementedHelloWorldServer) StreamBoth(HelloWorld_StreamBothServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamBoth not implemented")
 }
 func (UnimplementedHelloWorldServer) mustEmbedUnimplementedHelloWorldServer() {}
 
@@ -120,25 +196,72 @@ func _HelloWorld_Hello_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HelloWorld_Stream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(HelloWorldServer).Stream(&helloWorldStreamServer{stream})
+func _HelloWorld_StreamFrom_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(Request)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(HelloWorldServer).StreamFrom(m, &helloWorldStreamFromServer{stream})
 }
 
-type HelloWorld_StreamServer interface {
+type HelloWorld_StreamFromServer interface {
+	Send(*Response) error
+	grpc.ServerStream
+}
+
+type helloWorldStreamFromServer struct {
+	grpc.ServerStream
+}
+
+func (x *helloWorldStreamFromServer) Send(m *Response) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _HelloWorld_StreamTo_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HelloWorldServer).StreamTo(&helloWorldStreamToServer{stream})
+}
+
+type HelloWorld_StreamToServer interface {
+	SendAndClose(*Response) error
+	Recv() (*Request, error)
+	grpc.ServerStream
+}
+
+type helloWorldStreamToServer struct {
+	grpc.ServerStream
+}
+
+func (x *helloWorldStreamToServer) SendAndClose(m *Response) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *helloWorldStreamToServer) Recv() (*Request, error) {
+	m := new(Request)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _HelloWorld_StreamBoth_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HelloWorldServer).StreamBoth(&helloWorldStreamBothServer{stream})
+}
+
+type HelloWorld_StreamBothServer interface {
 	Send(*Response) error
 	Recv() (*Request, error)
 	grpc.ServerStream
 }
 
-type helloWorldStreamServer struct {
+type helloWorldStreamBothServer struct {
 	grpc.ServerStream
 }
 
-func (x *helloWorldStreamServer) Send(m *Response) error {
+func (x *helloWorldStreamBothServer) Send(m *Response) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *helloWorldStreamServer) Recv() (*Request, error) {
+func (x *helloWorldStreamBothServer) Recv() (*Request, error) {
 	m := new(Request)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -160,8 +283,18 @@ var HelloWorld_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Stream",
-			Handler:       _HelloWorld_Stream_Handler,
+			StreamName:    "StreamFrom",
+			Handler:       _HelloWorld_StreamFrom_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamTo",
+			Handler:       _HelloWorld_StreamTo_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "StreamBoth",
+			Handler:       _HelloWorld_StreamBoth_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
